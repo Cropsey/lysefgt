@@ -1,0 +1,20 @@
+{
+    "title": "Learn You Some eBPF for Greater Good II.",
+    "description": "tbd",
+    "details": {
+        "intro": {
+            "text": "intro.md"
+        },
+        "steps": [
+            {
+                "text": "step1.md"
+            }
+        ]
+    },
+    "backend": {
+        "imageid": "ubuntu"
+    },
+    "interface": {
+        "layout": "ide"
+    }
+}
