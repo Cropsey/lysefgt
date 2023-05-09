@@ -1,0 +1,37 @@
+{
+    "title": "Part 2: Profile Kubernetes Environment",
+    "description": "Follow-up on the profiler from scratch - turning it all into a cluster-wide continuous profiling technology.",
+    "details": {
+        "intro": {
+            "text": "intro.md",
+            "foreground": "setup.bash"
+        },
+        "steps": [
+            {
+                "text": "step1.md"
+            },
+            {
+                "text": "step2.md"
+            },
+            {
+                "text": "step3.md"
+            },
+            {
+                "text": "step4.md"
+            }
+        ],
+        "finish": {
+            "text": "finish.md"
+        },
+        "assets": {
+            "host01": [
+                {"file": "prometheus.yaml", "target": "/root/assets", "chmod": "+w"},
+                {"file": "grafana.yaml", "target": "/root/assets", "chmod": "+w"},
+                {"file": "registry.yaml", "target": "/root/assets", "chmod": "+w"}
+            ]
+        }
+    },
+    "backend": {
+        "imageid": "kubernetes-kubeadm-1node"
+    }
+}

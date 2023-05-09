@@ -1,0 +1,285 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: grafana
+  name: grafana
+spec:
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        supplementalGroups:
+          - 0
+      containers:
+        - name: grafana
+          image: grafana/grafana:9.5.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http-grafana
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 20
+            httpGet:
+              path: /robots.txt
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 3
+            periodSeconds: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 3000
+            timeoutSeconds: 1
+          resources:
+            requests:
+              cpu: 250m
+              memory: 750Mi
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/grafana/grafana.ini"
+              subPath: grafana.ini
+            - name: config 
+              mountPath: "/etc/grafana/provisioning/datasources/datasources.yaml"
+              subPath: datasources.yaml
+            - name: config 
+              mountPath: "/etc/grafana/provisioning/dashboards/dashboardproviders.yaml"
+              subPath: dashboardproviders.yaml
+            - name: config 
+              mountPath: "/var/lib/grafana/dashboards/my/profiling_graphs.json"
+              subPath: profiling_graphs.json
+      volumes:
+        - name: config
+          configMap:
+            name: grafana
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+spec:
+  ports:
+    - port: 3000
+      protocol: TCP
+      nodePort: 30081
+      targetPort: http-grafana
+  selector:
+    app: grafana
+  type: NodePort
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana
+data:
+  grafana.ini: |-
+    [analytics]
+    reporting_enabled = false
+    check_for_updates = true
+
+    [log]
+    mode = console
+
+    [auth.basic]
+    enabled = false
+
+    [auth.anonymous]
+    enabled = true
+    org_role = Admin
+
+    [auth]
+    disable_login_form = true
+
+    [paths]
+    data = /var/lib/grafana/data
+    logs = /var/log/grafana
+    plugins = /var/lib/grafana/plugins
+    provisioning = /etc/grafana/provisioning
+
+    [panels]
+    disable_sanitize_html = true
+
+    [server]
+    http_port = 3000
+
+    [security]
+    disable_gravatar = true
+    allow_embedding = true
+
+    [metrics]
+    enabled = true
+    disable_total_stats = false
+
+    [dashboards]
+    default_home_dashboard_path = /var/lib/grafana/dashboards/my/profiling_graphs.json
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    - access: proxy
+      isDefault: true
+      name: Prometheus
+      type: prometheus
+      id: "prometheus"
+      url: http://prometheus-server.default.svc
+  dashboardproviders.yaml: |-
+    apiVersion: 1
+    providers:
+    - disableDeletion: false
+      editable: false
+      folder: My
+      name: my
+      options:
+        path: /var/lib/grafana/dashboards/my
+      orgId: 1
+      type: file
+  profiling_graphs.json: |
+    {
+      "title": "Profiler Graphs",
+      "panels": [
+        {
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 16
+          },
+          "type": "table",
+          "datasource": "Prometheus",
+          "description": "todo",
+          "id":124,
+          "title":"Stack trace stats for ${pid} \"${bin}\" on ${host}",
+          "targets": [
+            {
+              "expr": "sort_desc(sum by(symbol,file,line,bin)(profiler_aggregated{pid=\"$pid\", bin=\"$bin\", instance=\"$host\"}))",
+              "interval": "",
+              "format": "table",
+              "range": false,
+              "legendFormat": "__auto",
+              "refId": "Self",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                  "excludeByName": {
+                      "Time": true
+                  },
+                  "indexByName": {},
+                  "renameByName": {}
+              }
+            }
+          ]
+        },
+        {
+          "type": "flamegraph",
+          "datasource": "Prometheus",
+          "description": "todo",
+          "id":123,
+          "title":"Flamegraph for ${pid} \"${bin}\" on ${host}",
+          "targets": [
+            {
+              "expr": "sum by(symbol,self,level)(profiler_aggregated{pid=\"${pid}\",bin=\"${bin}\",instance=\"${host}\"})",
+              "interval": "",
+              "format": "table",
+              "range": false,
+              "refId": "Self",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "convertFieldType",
+              "options": {
+                "fields": {},
+                "conversions": [
+                  {
+                    "targetField": "level",
+                    "destinationType": "number"
+                  },
+                  {
+                    "targetField": "self",
+                    "destinationType": "number"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "symbol", "level", "self", "Value"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "renameByRegex",
+              "options": {
+                "regex": "symbol",
+                "renamePattern": "Label"
+              }
+            },
+            {
+              "id": "renameByRegex",
+              "options": {
+                "regex": "level",
+                "renamePattern": "Level"
+              }
+            },
+            {
+              "id": "renameByRegex",
+              "options": {
+                "regex": "self",
+                "renamePattern": "Self"
+              }
+            }
+          ]
+        }
+      ],
+      "id": 123,
+      "datasource": "Prometheus",
+      "templating": {
+        "list": [
+          {
+            "allValue": ".*",
+            "datasource": "Prometheus",
+            "label": "bin",
+            "name": "bin",
+            "query": "label_values(profiler_aggregated, bin)",
+            "type": "query"
+           },
+          {
+            "allValue": ".*",
+            "datasource": "Prometheus",
+            "label": "pid",
+            "name": "pid",
+            "query": "label_values(profiler_aggregated{bin=\"$bin\"}, pid)",
+            "type": "query"
+           },
+          {
+            "allValue": ".*",
+            "datasource": "Prometheus",
+            "label": "instance",
+            "name": "host",
+            "query": "label_values(profiler_aggregated, instance)",
+            "type": "query"
+           }
+        ]
+      }
+    }
