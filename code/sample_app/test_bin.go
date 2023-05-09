@@ -3,34 +3,33 @@
 
 package main
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
-func easyToFindFunctionName(arg uint32) {
-	time.Sleep(5 * time.Second)
-	fmt.Println(arg)
+const x = 100000
+
+func easyToFindFunctionName() {
+	fmt.Println("easyToFindFunctionName")
+	sum := 0
+	for i := 0; i < x; i++ {
+		for j := 0; j < x; j++ {
+			sum += i + j
+		}
+	}
 }
 
-func easyToFindFunctionNameNoArg() {
-	fmt.Println("")
-}
-
-func EasyToFindFunctionName(arg uint32) {
-	easyToFindFunctionName(arg)
+func alsoEasyToFindFunctionName() {
+	fmt.Println("alsoEasyToFindFunctionName")
+	sum := 0
+	for i := 0; i < x; i++ {
+		for j := 0; j < x/10; j++ {
+			sum += i + j
+		}
+	}
 }
 
 func main() {
-	easyToFindFunctionNameNoArg()
-	t1 := time.NewTicker(time.Second * 3)
-	t2 := time.NewTicker(time.Second * 5)
 	for {
-		select {
-		case <-t1.C:
-			EasyToFindFunctionName(1)
-		case <-t2.C:
-			EasyToFindFunctionName(2)
-		}
+		easyToFindFunctionName()
+		alsoEasyToFindFunctionName()
 	}
 }
