@@ -1,0 +1,36 @@
+{
+    "title": "Writing eBPF Profiler from Scratch",
+    "description": "This scenario will guide you through a process of writing a very simple application profiler.",
+    "details": {
+        "intro": {
+            "text": "intro.md",
+            "foreground": "setup.bash"
+        },
+        "steps": [
+            {
+                "text": "step1.md"
+            },
+            {
+                "text": "step2.md"
+            },
+            {
+                "text": "step3.md"
+            },
+            {
+                "text": "step4.md"
+            },
+            {
+                "text": "step5.md"
+            },
+            {
+                "text": "step6.md"
+            },
+            {
+                "text": "step7.md"
+            }
+        ]
+    },
+    "backend": {
+        "imageid": "ubuntu"
+    }
+}
