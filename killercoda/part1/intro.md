@@ -15,4 +15,4 @@ You'll have the opportunity to incrementally construct your own profiler using e
 
 Wondering why we are building a profiler from scratch? Constructing from the ground up provides a unique learning opportunity. By engaging with each line of code - whether it's writing or reading - you'll cultivate a deeper understanding of profilers, including how they interact with your programs.
 
-So, ready to dive into the byte pool and make a splash in your system programming skills? 
+So, ready to dive into the byte pool and make a splash in your programming skills? 

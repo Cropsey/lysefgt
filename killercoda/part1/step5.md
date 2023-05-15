@@ -1,0 +1,2 @@
+### Step 5: Cracking the Code with "debug/elf"
+Have you ever wished you could decipher code as if it was a language? Well, we're about to fulfill that wish. In this step, we'll employ the Go core package `"debug/elf"` to extract human-readable function names from the addresses returned by `bpf_get_stack`. It's like translating machine language into human language. Prepare to see your code in a whole new light!

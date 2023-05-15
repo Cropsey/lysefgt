@@ -1,0 +1,2 @@
+### Step 6: Enhancing Stack Traces with "debug/dwarf"
+If you thought things were getting exciting, just wait till we bring in `"debug/dwarf"`! In this step, we'll enhance our stack traces further, coupling function names with their respective source file names and lines. By the end of this step, your stack traces will be bursting with information, providing the level of insight you need to truly understand your application's performance.

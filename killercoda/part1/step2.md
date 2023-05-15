@@ -1,0 +1,2 @@
+### Step 2: Meet Your Sample App
+Before we embark on our profiler building journey, let's take a moment to get acquainted with our example application. This humble little piece of software will serve as our experimental subject as we explore ELF, DWARF, and the magic of eBPF. Understanding our sample app will be crucial to the success of our profiler. So, let's dive into its code and start unraveling its secrets.
