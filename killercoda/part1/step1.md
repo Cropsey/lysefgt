@@ -1,40 +1,31 @@
-
-### Single line code blocks can be copied by default
-`copy me`
-
-### It can also be disabled
-`copying disabled`{{}}
-
-### Execute a command per click
-`ls -lh`{{exec}}
-
-### Send Ctrl+c before execute
-Run a blocking command:
-`sleep 1d`{{exec}}
-
-End it and run another:
-`whoami`{{exec interrupt}}
-
-### Copy multiline code block
+### Background setup for Ubuntu
+We use Ubuntu VM here in this killercoda scenario. The background script installs
+all the necessary tools for this particular workshop.
 ```
-uname -r
-pwd
-```{{copy}}
-
-### Execute multiline code block
-
+apt-get install clang llvm
 ```
-uname -r
-pwd
+
+#### Working repository
+Let's clone the code
+```
+git clone https://github.com/Cropsey/lysefgt.git
+cd lysefgt/code/sample_app
 ```{{exec}}
 
-
-### Execute multiline code block with Ctrl+c
-Run a blocking command:
-`sleep 1d`{{exec}}
-
-End it and run others:
+Build and run a sample application that we will later profile
 ```
-uname -r
-whoami
-```{{exec interrupt}}
+make
+./testbin
+```{{exec}}
+
+Open a new terminal tab inside killercoda and continue there with building a sample app
+Build the profiler
+```
+cd lysefgt/code/perf_hacking
+make bpfperf
+```{{exec}}
+Get the PID of the sample app and run the profiler
+```
+pid=$(ps aux | awk '/testbin/{print($2)}' )
+./bpfperf -pid $pid
+```{{exec}}
