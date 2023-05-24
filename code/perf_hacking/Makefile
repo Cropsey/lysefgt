@@ -5,8 +5,8 @@ bpf_bpfel_x86.o: main.go perf.c
 	CPATH=../headers go generate ./...
 
 # perf
-bpfperf: main.go stack_from_elf.go bpf_bpfel_x86.o
-	go build -o bpfperf ./main.go ./bpf_bpfel_x86.go ./stack_from_elf.go
+bpfperf: main.go parser.go bpf_bpfel_x86.o
+	go build -o bpfperf ./main.go ./bpf_bpfel_x86.go ./parser.go
 
 .PHONY: clean
 clean:

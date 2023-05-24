@@ -22,6 +22,7 @@ func main() {
 	var pid int
 	flag.IntVar(&pid, "pid", 0, "PID of the profiled process")
 	flag.Parse()
+	log.SetOutput(os.Stderr)
 
 	objs := bpfObjects{}
 	if err := loadBpfObjects(&objs, nil); err != nil {
@@ -46,8 +47,6 @@ func main() {
 		<-stopper
 		rd.Close()
 	}()
-
-	log.Println("Waiting for events..")
 
 	anyCPU := -1
 	groupLeader := -1
@@ -95,6 +94,8 @@ func main() {
 	}
 	elf := newElf(binPath)
 	var event bpfEvent
+	log.Println("Waiting for events..")
+
 	for {
 		record, err := rd.Read()
 		if err != nil {
@@ -106,23 +107,16 @@ func main() {
 			continue
 		}
 		if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
-			log.Printf("parsing perf event: %s", err)
+			log.Printf("parsing perf event error: %s", err)
 		}
 
-		log.Printf("event: %v\n", event.Pid)
-
-		bs := make([]byte, 0, len(event.Name))
-		for i := 0; i < len(event.Name) && event.Name[i] != 0; i++ {
-			bs = append(bs, byte(event.Name[i]))
-		}
-		var name = string(bs)
-		log.Printf("binary: %v\n", name)
-
+		fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), event.Pid)
 		ustack := elf.humanReadableStack(event.UserStack)
+		fmt.Println("  ADDRESS    PC         SYMBOL                             FILE:LINE")
+		fmt.Println("  ---------  ---------  ---------------------------------  ------------------------------------")
 		for _, l := range ustack {
-			log.Printf("  %v\n", l)
+			fmt.Println(" ", l)
 		}
-
-		log.Println()
+		fmt.Println()
 	}
 }

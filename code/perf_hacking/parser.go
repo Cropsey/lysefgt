@@ -20,7 +20,7 @@ type stackPos struct {
 }
 
 func (sp stackPos) String() string {
-	return fmt.Sprintf("0x%0.8x 0x%0.8x %v:%v %v()", sp.addr, sp.pc, sp.file, sp.line, sp.symbol)
+	return fmt.Sprintf("0x%0.8x 0x%0.8x %-33v  %v:%v", sp.addr, sp.pc, sp.symbol+"()", sp.file, sp.line)
 }
 
 type elfHelper struct {
@@ -95,15 +95,11 @@ func (e elfHelper) humanReadableStack(stack [100]uint64) []stackPos {
 		for _, s := range e.symbols {
 			if addr < s.Value {
 				entry, err := e.seekDwarfEntry(prev.symbol)
-				if err != nil {
-					log.Printf("failed to dwarf SeekToTypeNamed(%v) = %v\n", prev.symbol, err)
-				} else {
-					if entry != nil {
-						prev.file = entry.file
-						prev.line = entry.line
-					}
+				if err == nil && entry != nil {
+					prev.file = entry.file
+					prev.line = entry.line
+					prettyStack = append(prettyStack, prev)
 				}
-				prettyStack = append(prettyStack, prev)
 				break
 			}
 			prev.symbol = s.Name
@@ -111,4 +107,13 @@ func (e elfHelper) humanReadableStack(stack [100]uint64) []stackPos {
 		}
 	}
 	return prettyStack
+}
+
+// convert 0 terminated string to go string
+func (event bpfEvent) taskComm() string {
+	bs := make([]byte, 0, len(event.Name))
+	for i := 0; i < len(event.Name) && event.Name[i] != 0; i++ {
+		bs = append(bs, byte(event.Name[i]))
+	}
+	return string(bs)
 }
