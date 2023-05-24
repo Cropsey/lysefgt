@@ -1,6 +1,6 @@
 {
     "title": "Writing eBPF Profiler from Scratch",
-    "description": "tbd",
+    "description": "This scenario will guide you through a process of writing a very simple application profiler.",
     "details": {
         "intro": {
             "text": "intro.md",
