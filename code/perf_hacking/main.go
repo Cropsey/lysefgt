@@ -2,36 +2,22 @@ package main
 
 import (
 	"errors"
+	"flag"
+	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"strconv"
-	"syscall"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/perf"
-	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		log.Fatalf("Expected: ./%s <PID>\n", os.Args[0])
-	}
-	pid, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-		log.Fatalf("Failed to parse pid from '%s': %v", os.Args[1], err)
-	}
-
-	// Subscribe to signals for terminating the program.
-	stopper := make(chan os.Signal, 1)
-	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
-
-	// Allow the current process to lock memory for eBPF resources.
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("Failed to update rlimit: %v", err)
-	}
+	var pid int
+	flag.IntVar(&pid, "pid", 0, "PID of the profiled process")
+	flag.Parse()
+	log.SetOutput(os.Stderr)
 
 	// Create a perf event array for the kernel to write perf records to.
 	// These records will be read by userspace below.
@@ -44,20 +30,12 @@ func main() {
 	}
 	defer events.Close()
 
-	// Open a perf reader from userspace into the perf event array
-	// created earlier.
+	// Open a perf reader from userspace into the perf event array created earlier.
 	rd, err := perf.NewReader(events, os.Getpagesize())
 	if err != nil {
 		log.Fatalf("Creating event reader: %s", err)
 	}
 	defer rd.Close()
-
-	// Close the reader when the process receives a signal, which will exit
-	// the read loop.
-	go func() {
-		<-stopper
-		rd.Close()
-	}()
 
 	// Metadata for the eBPF program used in this example.
 	var progSpec = &ebpf.ProgramSpec{
@@ -98,7 +76,10 @@ func main() {
 	defer prog.Close()
 	log.Println("Waiting for events..")
 
-	ev, err := unix.PerfEventOpen(
+	anyCPU := -1
+	groupLeader := -1
+	// perf_event_open syscall
+	perfEventFD, err := unix.PerfEventOpen(
 		&unix.PerfEventAttr{
 			Type:        unix.PERF_TYPE_SOFTWARE,
 			Config:      unix.PERF_COUNT_SW_CPU_CLOCK,
@@ -107,31 +88,31 @@ func main() {
 			Wakeup:      1,
 		},
 		pid,
-		0,
-		-1,
+		anyCPU,
+		groupLeader,
 		unix.PERF_FLAG_FD_CLOEXEC,
 	)
 	if err != nil {
 		log.Fatalf("Failed to create the perf event: %v", err)
 	}
 	defer func() {
-		if err := unix.Close(ev); err != nil {
+		if err := unix.Close(perfEventFD); err != nil {
 			log.Fatalf("Failed to close perf event: %v", err)
 		}
 	}()
 
 	// attach ebpf to perf event
-	if err := unix.IoctlSetInt(ev, unix.PERF_EVENT_IOC_SET_BPF, prog.FD()); err != nil {
+	if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_SET_BPF, prog.FD()); err != nil {
 		log.Fatalf("Failed to attach eBPF program to perf event: %v", err)
 	}
 
 	// start perf event
-	if err := unix.IoctlSetInt(ev, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
+	if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
 		log.Fatalf("Failed to enable perf event: %v", err)
 	}
 
 	defer func() {
-		if err := unix.IoctlSetInt(ev, unix.PERF_EVENT_IOC_DISABLE, 0); err != nil {
+		if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_DISABLE, 0); err != nil {
 			log.Fatalf("Failed to disable perf event: %v", err)
 		}
 	}()
@@ -147,6 +128,10 @@ func main() {
 			continue
 		}
 
-		log.Println("Record:", record)
+		fmt.Printf("pid[%v]\n", pid)
+		fmt.Println("  RECORD")
+		fmt.Println("  ---------")
+		fmt.Println(" ", record)
+		fmt.Println()
 	}
 }
