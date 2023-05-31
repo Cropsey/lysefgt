@@ -94,9 +94,12 @@ func main() {
 		}
 
 		fmt.Printf("pid[%v]\n", pid)
-		fmt.Println("  EVENT")
+		ustack := stack(event.UserStack)
+		fmt.Println("  ADDRESS")
 		fmt.Println("  ---------")
-		fmt.Println(" ", event)
+		for _, l := range ustack {
+			fmt.Println(" ", l)
+		}
 		fmt.Println()
 	}
 }

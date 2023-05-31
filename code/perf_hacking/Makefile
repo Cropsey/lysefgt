@@ -1,7 +1,7 @@
 all: bpfperf
 
-bpfperf: main.go bpf_bpfel_x86.o
-	go build -o bpfperf ./main.go ./bpf_bpfel_x86.go
+bpfperf: main.go parser.go bpf_bpfel_x86.o
+	go build -o bpfperf ./main.go ./parser.go ./bpf_bpfel_x86.go
 
 # compile eBPF program using cillium/ebpf library
 bpf_bpfel_x86.o: main.go perf.c
