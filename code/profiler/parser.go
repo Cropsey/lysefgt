@@ -1,11 +1,14 @@
 package main
 
 import (
+	"debug/dwarf"
 	"debug/elf"
 	"fmt"
 	"log"
 	"os"
 	"sort"
+
+	"github.com/go-delve/delve/pkg/dwarf/reader"
 )
 
 // To keep track of particular stack trace position enhanced with human readable metadata
@@ -13,11 +16,13 @@ type stackPos struct {
 	addr   uint64 // Exact address from the stack at the time of perf event sample
 	pc     uint64 // Address of the symbol for the exact address
 	symbol string // Symbol from ELF
+	file   string // Source code file path from DWARF
+	line   int    // Source code file line from DWARF
 }
 
 // Prettier print for stackPos
 func (sp stackPos) String() string {
-	return fmt.Sprintf("0x%0.8x 0x%0.8x %-33v", sp.addr, sp.pc, sp.symbol+"()")
+	return fmt.Sprintf("0x%0.8x 0x%0.8x %-33v  %v:%v", sp.addr, sp.pc, sp.symbol+"()", sp.file, sp.line)
 }
 
 // Pre-processed ELF data of the profiled binary
@@ -65,6 +70,12 @@ func (e elfHelper) humanReadableStack(stack [10]uint64) []stackPos {
 		// Find the matching symbol from ELF
 		for _, s := range e.symbols {
 			if addr < s.Value {
+				// Enhance by DWARF data if available
+				entry, err := e.seekDwarfEntry(prev.symbol)
+				if err == nil && entry != nil {
+					prev.file = entry.file
+					prev.line = entry.line
+				}
 				st = append(st, prev)
 				break
 			}
@@ -73,6 +84,54 @@ func (e elfHelper) humanReadableStack(stack [10]uint64) []stackPos {
 		}
 	}
 	return st
+}
+
+func (e elfHelper) seekDwarfEntry(symbol string) (*stackPos, error) {
+	// Calling this for every event is horribly inefficient, ideally this should be lazily cached in a lookup table
+	dwrf, err := e.elfFile.DWARF()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get dwarf: %w", err)
+	}
+	dwr := reader.New(dwrf)
+	// Keep track of last compile unit so when subprogram is found, line entry reader can be initialized
+	var lastCompileUnit *dwarf.Entry
+	// Iterate over DWARF entries
+	for entry, err := dwr.Next(); entry != nil; entry, err = dwr.Next() {
+		if err != nil {
+			return nil, fmt.Errorf("failed to get next DWARF entry: %w", err)
+		}
+		// The entry is a CompileUnit
+		if entry.Tag == dwarf.TagCompileUnit {
+			pin := *entry
+			lastCompileUnit = &pin
+		}
+		// It has a DWARF attribute "name"
+		name, ok := entry.Val(dwarf.AttrName).(string)
+		if !ok {
+			continue
+		}
+		// The DWARF attribute "name" matches ELF symbol
+		if name == symbol {
+			// Create DWARF reader for the line table
+			lr, err := dwrf.LineReader(lastCompileUnit)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create DWARF line reader: %w", err)
+			}
+			le := dwarf.LineEntry{}
+			if entry.Val(dwarf.AttrLowpc) == nil {
+				return nil, fmt.Errorf("DWARF entry has no LowPC attribute")
+			}
+			pc := entry.Val(dwarf.AttrLowpc).(uint64)
+			// Find the line entry
+			if err := lr.SeekPC(pc, &le); err != nil {
+				return nil, fmt.Errorf("failed to seek DWARF line entry at pc %v: %w", pc, err)
+			}
+			// Add source code file name and line to the stack trace
+			return &stackPos{line: le.Line, file: le.File.Name}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("entry %v not found", symbol)
 }
 
 // Convert 0 terminated C string to Go string
