@@ -84,6 +84,8 @@ func main() {
 		}
 	}()
 
+	// Create ELF parser for the binary running as process with PID
+	elf := newElf(pid)
 	// Forward declarations for the loop variables
 	var event bpfEvent
 
@@ -104,12 +106,12 @@ func main() {
 			log.Printf("parsing perf event failed: %s", err)
 		}
 
-		// Get the stack trace from eBPF with raw addresses
-		ustack := stack(event.UserStack)
+		// Transform the stack trace from eBPF with raw addresses to something more readable
+		ustack := elf.humanReadableStack(event.UserStack)
 		// Print each event
 		fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), pid)
-		fmt.Println("  ADDRESS")
-		fmt.Println("  ---------")
+		fmt.Println("  ADDRESS    PC         SYMBOL                            ")
+		fmt.Println("  ---------  ---------  --------------------------------- ")
 		for _, l := range ustack {
 			fmt.Println(" ", l)
 		}
