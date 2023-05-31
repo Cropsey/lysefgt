@@ -93,7 +93,7 @@ func main() {
 			log.Printf("parsing perf event failed: %s", err)
 		}
 
-		fmt.Printf("pid[%v]\n", pid)
+		fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), pid)
 		ustack := stack(event.UserStack)
 		fmt.Println("  ADDRESS")
 		fmt.Println("  ---------")
