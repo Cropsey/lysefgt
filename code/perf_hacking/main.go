@@ -78,6 +78,7 @@ func main() {
 		}
 	}()
 
+	elf := newElf(pid)
 	var event bpfEvent
 	for {
 		record, err := rd.Read()
@@ -94,9 +95,9 @@ func main() {
 		}
 
 		fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), pid)
-		ustack := stack(event.UserStack)
-		fmt.Println("  ADDRESS")
-		fmt.Println("  ---------")
+		ustack := elf.humanReadableStack(event.UserStack)
+		fmt.Println("  ADDRESS    PC         SYMBOL                            ")
+		fmt.Println("  ---------  ---------  --------------------------------- ")
 		for _, l := range ustack {
 			fmt.Println(" ", l)
 		}
