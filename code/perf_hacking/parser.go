@@ -28,6 +28,46 @@ type elfHelper struct {
 	elfFile *elf.File
 }
 
+type aggregate struct {
+	count map[string]int
+	meta  map[string]stackPos
+}
+
+type sortSymbolCount struct {
+	symbol string
+	count  int
+}
+
+func newAggregate() *aggregate {
+	return &aggregate{
+		count: make(map[string]int),
+		meta:  make(map[string]stackPos),
+	}
+}
+
+func (a *aggregate) add(sp stackPos) {
+	a.count[sp.symbol] += 1
+	if _, exists := a.meta[sp.symbol]; !exists {
+		a.meta[sp.symbol] = sp
+	}
+}
+
+func (a *aggregate) print() {
+	var s []sortSymbolCount
+	for symbol, count := range a.count {
+		s = append(s, sortSymbolCount{symbol: symbol, count: count})
+	}
+	sort.Slice(s, func(i, j int) bool { return s[i].count > s[j].count })
+	fmt.Println()
+	fmt.Println("AGGREGATED PERF EVENT SAMPLES:")
+	fmt.Println("  COUNT  SYMBOL                                 FILE:LINE")
+	fmt.Println("  -----  -------------------------------------  ------------------------------------")
+	for _, sorted := range s {
+		sp := a.meta[sorted.symbol]
+		fmt.Printf("%7d  %-37v  %v:%v\n", sorted.count, sp.symbol+"()", sp.file, sp.line)
+	}
+}
+
 func newElf(pid int) elfHelper {
 	binPath, err := os.Readlink(fmt.Sprintf("/proc/%v/exe", pid))
 	if err != nil {
