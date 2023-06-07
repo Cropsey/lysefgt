@@ -21,7 +21,7 @@ func alsoEasyToFindFunctionName() {
 	fmt.Println("alsoEasyToFindFunctionName")
 	sum := 0
 	for i := 0; i < x; i++ {
-		for j := 0; j < x/10; j++ {
+		for j := 0; j < x; j++ {
 			sum += i + j
 		}
 	}
