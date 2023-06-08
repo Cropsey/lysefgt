@@ -1,7 +1,0 @@
-{
-    "title": "Learn You Some eBPF for Greater Good",
-    "items": [
-        { "path": "part1" },
-        { "path": "part2" }
-    ]
-}
