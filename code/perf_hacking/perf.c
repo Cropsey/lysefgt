@@ -65,12 +65,9 @@ int perf_event_stacktrace(struct pt_regs *ctx) {
     event->user_stack_size = bpf_get_stack(ctx, event->user_stack, max_len, BPF_F_USER_STACK);
 
     // Using eBPF helper to print tracing information for debugging purposes
+    // on older kernels ABI allows passing up to 4 parameters
     // can be viewed in /sys/kernel/debug/tracing/trace_pipe
-    bpf_printk("sending event: name(%s) size(%d), kernel_size(%d)/userspace_size(%d)",
-            event->name,
-            sizeof(*event),
-            event->kern_stack_size,
-            event->user_stack_size);
+    bpf_printk("sending event: name(%s) kernel_size(%d)/userspace_size(%d)", event->name, event->kern_stack_size, event->user_stack_size);
 
     // Send the event with stack traces from kernel to user space
     bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, event, sizeof(*event));
