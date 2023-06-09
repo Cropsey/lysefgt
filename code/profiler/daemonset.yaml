@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: profiler
+  name: profiler
+spec:
+  selector:
+    matchLabels:
+      app: profiler
+  template:
+    metadata:
+      labels:
+        app: profiler
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "2112"
+    spec:
+      hostPID: true
+      containers:
+      - image: registry.kube-system.svc:5000/profiler
+        imagePullPolicy: Always
+        name: profiler
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /run
+          name: run
+        - mountPath: /sys/fs/bpf
+          name: bpffs
+      volumes:
+      - hostPath:
+          path: /run
+        name: run
+      - hostPath:
+          path: /sys/fs/bpf
+        name: bpffs

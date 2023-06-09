@@ -4,12 +4,17 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/go-delve/delve/pkg/dwarf/reader"
 )
+
+var withContainerd bool
 
 // To keep track of particular stack trace position enhanced with human readable metadata
 type stackPos struct {
@@ -25,16 +30,22 @@ func (sp stackPos) String() string {
 	return fmt.Sprintf("0x%0.8x 0x%0.8x %-33v  %v:%v", sp.addr, sp.pc, sp.symbol+"()", sp.file, sp.line)
 }
 
+// Lazily load ELF data for profiled binaries
+type elfHelperMap struct {
+	helpers map[int]elfHelper
+	skip    map[int]bool
+}
+
 // Pre-processed ELF data of the profiled binary
 type elfHelper struct {
 	symbols []elf.Symbol
 	elfFile *elf.File
 }
 
-// Statistics for stack trace symbol counts
+// Statistics for stack trace symbol counts per PID
 type stats struct {
-	count map[string]int
-	meta  map[string]stackPos
+	count map[int]map[string]int
+	meta  map[int]map[string]stackPos
 }
 
 // Helper for sorting symbols from stack trace stats by most frequently occurring
@@ -46,61 +57,125 @@ type sortSymbolCount struct {
 // Initialize stats counters for stack trace symbol counts
 func newStats() *stats {
 	return &stats{
-		count: make(map[string]int),
-		meta:  make(map[string]stackPos),
+		count: make(map[int]map[string]int),
+		meta:  make(map[int]map[string]stackPos),
 	}
 }
 
 // Process stack position by stats counter
-func (a *stats) add(sp stackPos) {
-	a.count[sp.symbol] += 1
-	if _, exists := a.meta[sp.symbol]; !exists {
-		a.meta[sp.symbol] = sp
+func (a *stats) add(pid int, sp stackPos) {
+	if _, ok := a.count[pid]; !ok {
+		a.count[pid] = make(map[string]int)
+		a.meta[pid] = make(map[string]stackPos)
+	}
+	a.count[pid][sp.symbol] += 1
+	if _, exists := a.meta[pid][sp.symbol]; !exists {
+		a.meta[pid][sp.symbol] = sp
 	}
 }
 
 // Print stack trace stats summary
 func (a *stats) summary() {
-	var s []sortSymbolCount
-	for symbol, count := range a.count {
-		s = append(s, sortSymbolCount{symbol: symbol, count: count})
-	}
-	sort.Slice(s, func(i, j int) bool { return s[i].count > s[j].count })
 	fmt.Println()
 	fmt.Println("AGGREGATED PERF EVENT SAMPLES:")
-	fmt.Println("  COUNT  SYMBOL                                 FILE:LINE")
-	fmt.Println("  -----  -------------------------------------  ------------------------------------")
-	for _, sorted := range s {
-		sp := a.meta[sorted.symbol]
-		fmt.Printf("%7d  %-37v  %v:%v\n", sorted.count, sp.symbol+"()", sp.file, sp.line)
+	fmt.Println("  COUNT PID    SYMBOL                                 FILE:LINE")
+	fmt.Println("  ----- ------ -------------------------------------  ------------------------------------")
+	for pid, pidcount := range a.count {
+		var s []sortSymbolCount
+		for symbol, count := range pidcount {
+			s = append(s, sortSymbolCount{symbol: symbol, count: count})
+		}
+		sort.Slice(s, func(i, j int) bool { return s[i].count > s[j].count })
+		for _, sorted := range s {
+			sp := a.meta[pid][sorted.symbol]
+			fmt.Printf("%7d  %6d %-37v  %v:%v\n", sorted.count, pid, sp.symbol+"()", sp.file, sp.line)
+		}
+		fmt.Println()
 	}
 }
 
 // Initialize ELF helper
-func newElf(pid int) elfHelper {
+func newElf(pid int) elfHelperMap {
+	if pid == 0 {
+		log.Printf("lazy loading all-pid ELF helper")
+		return elfHelperMap{
+			helpers: make(map[int]elfHelper),
+			skip:    make(map[int]bool),
+		}
+	} else {
+		log.Printf("pre-loaded ELF helper for PID %v", pid)
+		eh, err := newElfHelperForPid(pid)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return elfHelperMap{
+			helpers: map[int]elfHelper{pid: eh},
+			skip:    make(map[int]bool),
+		}
+	}
+}
+
+// Convert the address stack trace to human readable stack trace if desired by the profiler
+// skips the processes that it can't understand
+func (e elfHelperMap) humanReadableStack(pid int, stack [10]uint64) []stackPos {
+	if e.skip[pid] {
+		return nil
+	}
+	eh, ok := e.helpers[pid]
+	if ok {
+		return eh.humanReadableStack(stack)
+	}
+	eh, err := newElfHelperForPid(pid)
+	if err != nil {
+		log.Printf("lazy ELF helper for pid %v skip: %v", pid, err)
+		e.skip[pid] = true
+		return nil
+	}
+	e.helpers[pid] = eh
+	return eh.humanReadableStack(stack)
+}
+
+// Initialize ELF helper for PID
+func newElfHelperForPid(pid int) (elfHelper, error) {
 	// Figure out the binary path for the process with PID
 	binPath, err := os.Readlink(fmt.Sprintf("/proc/%v/exe", pid))
 	if err != nil {
-		log.Fatalf("Failed to read binpath from pid %v: %v", err)
+		return elfHelper{}, fmt.Errorf("Failed to read binpath from pid %v: %v", pid, err)
+	}
+	if withContainerd {
+		// When running the profiler in kubernetes, executing containers have their binaries on the container FS
+		// it's possible to determine where exactly by looking at cgroup for the PID containing container ID
+		cgroup, err := ioutil.ReadFile(fmt.Sprintf("/proc/%v/cgroup", pid))
+		if err != nil {
+			return elfHelper{}, fmt.Errorf("Failed to read cgroup from pid %v: %v", pid, err)
+		}
+		containerID := string(regexp.MustCompile(`cri-containerd-.*\.scope`).Find(cgroup))
+		if containerID == "" {
+			return elfHelper{}, fmt.Errorf("Failed to determine containerID from cgroup for pid %v", pid)
+		}
+		containerID = strings.TrimPrefix(containerID, `cri-containerd-`)
+		containerID = strings.TrimSuffix(containerID, `.scope`)
+		binPath = fmt.Sprintf("/run/containerd/io.containerd.runtime.v2.task/k8s.io/%v/rootfs/%v", containerID, binPath)
 	}
 	f, err := os.Open(binPath)
 	if err != nil {
-		log.Fatalf("failed to open file %q: %v\n", binPath, err)
+		return elfHelper{}, fmt.Errorf("failed to open file %q: %v\n", binPath, err)
 	}
 	ef, err := elf.NewFile(f)
 	if err != nil {
-		log.Fatalf("failed to elf open file %q: %v\n", binPath, err)
+		return elfHelper{}, fmt.Errorf("failed to elf open file %q: %v\n", binPath, err)
 	}
+	// TODO: check if it's Go binary?
 	e := elfHelper{}
 
 	// Get symbols from ELF and sort them by address
 	e.symbols, err = ef.Symbols()
 	if err != nil {
-		log.Fatalf("failed to get elf symbols for file %q: %v\n", binPath, err)
+		return elfHelper{}, fmt.Errorf("failed to get elf symbols for file %q: %v\n", binPath, err)
 	}
 	sort.Slice(e.symbols, func(i, j int) bool { return e.symbols[i].Value < e.symbols[j].Value })
 	e.elfFile = ef
-	return e
+	return e, nil
 }
 
 // Convert the address stack trace to human readable stack trace
