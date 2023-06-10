@@ -104,23 +104,35 @@ func newElf(pid int) elfHelper {
 }
 
 // Convert the address stack trace to human readable stack trace
-func (e elfHelper) humanReadableStack(stack [10]uint64) []stackPos {
+func (e elfHelper) humanReadableStack(stack []uint64) []stackPos {
 	st := []stackPos{}
 	// For each address in the stack trace
+	fmt.Printf("humanReadableStack: length %v stack:\n", len(stack))
+	for i, x := range stack {
+		fmt.Printf("  %v %v\n", i, x)
+	}
 	for _, addr := range stack {
 		if addr == 0 {
+			fmt.Printf("  addr zero, breaking\n")
 			break
 		}
+		fmt.Printf("  addr %v\n", addr)
 		prev := stackPos{addr: addr}
 		// Find the matching symbol from ELF
+		fmt.Printf("    symbols: ... ")
 		for _, s := range e.symbols {
+			//fmt.Printf(" symbol %v", s)
+			//fmt.Printf(" s.Value %v", s.Value)
 			if addr < s.Value {
+				fmt.Printf("found: %v", s)
 				// Enhance by DWARF data if available
+				fmt.Printf(" previous.symbol: %v", prev.symbol)
 				entry, err := e.seekDwarfEntry(prev.symbol)
 				if err == nil && entry != nil {
 					prev.file = entry.file
 					prev.line = entry.line
 				}
+				fmt.Printf("\n  entry %v prev %v\n", entry, prev)
 				st = append(st, prev)
 				break
 			}
