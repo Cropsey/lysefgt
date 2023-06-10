@@ -1,96 +1,99 @@
 package main
 
 import (
-    "crypto/rand"
-    "fmt"
-    //"log"
-    "net/http"
-    //"io"
-    "os"
-    "encoding/hex"
+	"crypto/rand"
+	"crypto/sha256"
+	"fmt"
 
-    "golang.org/x/crypto/argon2"
+	//"log"
+	"net/http"
+	//"io"
+	"encoding/hex"
+	"os"
+
+	"golang.org/x/crypto/pbkdf2"
 )
 
 type params struct {
-    memory      uint32
-    iterations  uint32
-    parallelism uint8
-    length      uint32
+	memory      uint32
+	iterations  int
+	parallelism uint8
+	length      int
 }
 
 var ARGON_PARAMS = params{
-    memory:      64 * 1024,
-    iterations:  100,
-    parallelism: 1,
-    length:  16,
+	memory:      64 * 1024,
+	iterations:  5000000,
+	parallelism: 1,
+	length:      16,
 }
 
 func main() {
-    // TODO: imagining this will be a server
-    http.HandleFunc("/", handleHttp)
-    err := http.ListenAndServe(":3333", nil)
-    if err != nil {
-        fmt.Printf("error starting server: %s\n", err)
-        os.Exit(1)
-    }
+	// TODO: imagining this will be a server
+	http.HandleFunc("/", handleHttp)
+	err := http.ListenAndServe(":3333", nil)
+	if err != nil {
+		fmt.Printf("error starting server: %s\n", err)
+		os.Exit(1)
+	}
 
-    /*
-    for {
-        token, err := handleRequest("password123")
-        if err != nil {
-            log.Fatal(err)
-        }
+	/*
+	   for {
+	       token, err := handleRequest("password123")
+	       if err != nil {
+	           log.Fatal(err)
+	       }
 
-        fmt.Println(token)
-    }
-    */
+	       fmt.Println(token)
+	   }
+	*/
 }
 
 func handleHttp(w http.ResponseWriter, r *http.Request) {
-    fmt.Printf("HTTP request: %s\n", r.URL)
-    password := r.URL.Query()["password"][0]
-    fmt.Printf("HTTP password: %s\n", password)
+	fmt.Printf("HTTP request: %s\n", r.URL)
+	password := r.URL.Query()["password"][0]
+	fmt.Printf("HTTP password: %s\n", password)
 
-    token, _ := handleRequest(password)
-    //fmt.Println(token)
-    //io.WriteString(w, token)
-    fmt.Fprintf(w, "Token: %s\n", hex.EncodeToString(token))
+	token, _ := handleRequest(password)
+	//fmt.Println(token)
+	//io.WriteString(w, token)
+	fmt.Fprintf(w, "Token: %s\n", hex.EncodeToString(token))
 }
 
 func handleRequest(text string) ([]byte, error) {
-    var err error
-    var hash, random, token []byte
+	var err error
+	var hash, random, token []byte
 
-    if hash, err = processInput(text); err != nil {
-        return nil, err
-    }
-    if random, err = generateRandomBytes(ARGON_PARAMS.length); err != nil {
-        return nil, err
-    }
+	if hash, err = processInput(text); err != nil {
+		return nil, err
+	}
+	if random, err = generateRandomBytes(ARGON_PARAMS.length); err != nil {
+		return nil, err
+	}
 
-    token = make([]byte, ARGON_PARAMS.length)
-    for i, v := range hash {
-       token[i] = v ^ random[i]
-    }
+	token = make([]byte, ARGON_PARAMS.length)
+	for i, v := range hash {
+		token[i] = v ^ random[i]
+	}
 
-    return token, nil
+	return token, nil
 }
 
 func processInput(input string) ([]byte, error) {
-    var p = ARGON_PARAMS
-    var salt = make([]byte, p.length)
-    var hash = argon2.IDKey([]byte(input), salt, p.iterations, p.memory, p.parallelism, p.length)
+	var p = ARGON_PARAMS
+	var salt = make([]byte, p.length)
+	//var hash = argon2.IDKey([]byte(input), salt, p.iterations, p.memory, p.parallelism, p.length)
+	var hash = pbkdf2.Key([]byte(input), salt, p.iterations, p.length, sha256.New)
 
-    return hash, nil
+	return hash, nil
 }
 
-func generateRandomBytes(n uint32) ([]byte, error) {
-    b := make([]byte, n)
+func generateRandomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
 
-    if _, err := rand.Read(b); err != nil {
-        return nil, err
-    }
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
 
-    return b, nil
+	return b, nil
 }

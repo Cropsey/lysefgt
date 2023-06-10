@@ -13,7 +13,7 @@ enum {
 };
 
 // Max size of the stack trace, our traces are fairly small
-#define MAX_STACK_RAWTP 10
+#define MAX_STACK_RAWTP 30
 
 // Event we want to send from the kernel eBPF program to the user space
 struct event {

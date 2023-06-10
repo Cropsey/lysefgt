@@ -107,32 +107,34 @@ func newElf(pid int) elfHelper {
 func (e elfHelper) humanReadableStack(stack []uint64) []stackPos {
 	st := []stackPos{}
 	// For each address in the stack trace
-	fmt.Printf("humanReadableStack: length %v stack:\n", len(stack))
-	for i, x := range stack {
-		fmt.Printf("  %v %v\n", i, x)
-	}
+	/*
+		fmt.Printf("humanReadableStack: length %v stack:\n", len(stack))
+		for i, x := range stack {
+			fmt.Printf("  %v %v\n", i, x)
+		}
+	*/
 	for _, addr := range stack {
 		if addr == 0 {
-			fmt.Printf("  addr zero, breaking\n")
+			//fmt.Printf("  addr zero, breaking\n")
 			break
 		}
-		fmt.Printf("  addr %v\n", addr)
+		//fmt.Printf("  addr %v\n", addr)
 		prev := stackPos{addr: addr}
 		// Find the matching symbol from ELF
-		fmt.Printf("    symbols: ... ")
+		//fmt.Printf("    symbols: ... ")
 		for _, s := range e.symbols {
 			//fmt.Printf(" symbol %v", s)
 			//fmt.Printf(" s.Value %v", s.Value)
 			if addr < s.Value {
-				fmt.Printf("found: %v", s)
+				//fmt.Printf("found: %v", s)
 				// Enhance by DWARF data if available
-				fmt.Printf(" previous.symbol: %v", prev.symbol)
+				//fmt.Printf(" previous.symbol: %v", prev.symbol)
 				entry, err := e.seekDwarfEntry(prev.symbol)
 				if err == nil && entry != nil {
 					prev.file = entry.file
 					prev.line = entry.line
 				}
-				fmt.Printf("\n  entry %v prev %v\n", entry, prev)
+				//fmt.Printf("\n  entry %v prev %v\n", entry, prev)
 				st = append(st, prev)
 				break
 			}
@@ -175,7 +177,13 @@ func (e elfHelper) seekDwarfEntry(symbol string) (*stackPos, error) {
 				return nil, fmt.Errorf("failed to create DWARF line reader: %w", err)
 			}
 			le := dwarf.LineEntry{}
-			pc := entry.Val(dwarf.AttrLowpc).(uint64)
+			//pc := entry.Val(dwarf.AttrLowpc).(uint64)
+			pc_ := entry.Val(dwarf.AttrLowpc)
+			if pc_ == nil {
+				return nil, fmt.Errorf("failed to seek PC: %v", dwarf.AttrLowpc)
+			}
+			//fmt.Printf("pc before conversion: %v\n", pc_)
+			pc := pc_.(uint64)
 			// Find the line entry
 			if err := lr.SeekPC(pc, &le); err != nil {
 				return nil, fmt.Errorf("failed to seek DWARF line entry at pc %v: %w", pc, err)

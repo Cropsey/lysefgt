@@ -134,16 +134,18 @@ func main() {
 			record = *r
 		}
 
-		fmt.Println("RECORD RECEIVED")
+		//fmt.Println("RECORD RECEIVED")
 		// Read eBPF binary data into go native structure, the ABI compatibility is ensured by cilium/ebpf
 		if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
 			log.Printf("parsing perf event failed: %s", err)
 		}
 
-		fmt.Printf("received stack: length %v stack:\n", len(event.UserStack))
-		for i, x := range event.UserStack {
-			fmt.Printf("  %v %v\n", i, x)
-		}
+		/*
+			fmt.Printf("received stack: length %v stack:\n", len(event.UserStack))
+			for i, x := range event.UserStack {
+				fmt.Printf("  %v %v\n", i, x)
+			}
+		*/
 
 		// Transform the stack trace from eBPF with raw addresses to something more readable
 		ustack := elf.humanReadableStack(event.UserStack[:])
