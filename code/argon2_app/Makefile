@@ -1,4 +1,4 @@
-all: argonsrv argoncli
+all: argonsrv argoncli argonbin
 
 argonsrv: main.go
 	go build -gcflags '-l' -o argonsrv ./main.go
