@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/cilium/ebpf/perf"
@@ -17,11 +18,27 @@ import (
 // Use cilium/ebpf package to generate eBPF scaffold for programs and maps
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -target native -type event bpf perf.c -- -I../headers
 
+// recordBuffer forwards the perf.Reader records to a channel
+func recordBuffer(rd *perf.Reader, recordsChan chan *perf.Record) {
+	for {
+		record, err := rd.Read()
+		if err != nil {
+			if errors.Is(err, perf.ErrClosed) {
+				recordsChan <- nil
+			}
+			continue
+		}
+		recordsChan <- &record
+	}
+}
+
 // main is an entrypoint to the profiler
 func main() {
 	// Command line flag parsing
 	var pid int
+	var verbose int
 	flag.IntVar(&pid, "pid", 0, "PID of the profiled process")
+	flag.IntVar(&verbose, "v", 0, "Verbosity of perf event logs, 0 prints only aggregate, 1 prints each perf event record")
 	flag.Parse()
 
 	// Print errors where they belong
@@ -40,6 +57,10 @@ func main() {
 		log.Fatalf("Creating event reader: %s", err)
 	}
 	defer rd.Close()
+
+	// Wrap perf reader in a goroutine with buffer
+	recordsChan := make(chan *perf.Record, 1024)
+	go recordBuffer(rd, recordsChan)
 
 	log.Println("Waiting for events..")
 
@@ -86,19 +107,31 @@ func main() {
 
 	// Create ELF parser for the binary running as process with PID
 	elf := newElf(pid)
+
+	// Stack trace aggregator to print stats summary at the end
+	stats := newStats()
+	defer stats.summary()
+
+	// Capture SIGINT for graceful termination
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
 	// Forward declarations for the loop variables
 	var event bpfEvent
+	var record perf.Record
 
 	// Loop forever and process stack traces
 	for {
-		record, err := rd.Read()
-		if err != nil {
-			if errors.Is(err, perf.ErrClosed) {
-				log.Println("Received signal, exiting..")
+		// Select whether there is a new record or SIGTERM to close the program
+		select {
+		case <-c: // SIGTERM -> graceful termination
+			return
+		case r := <-recordsChan: // Record from perf event fd reader
+			if r == nil {
+				// unrecoverable error from perfFD
 				return
 			}
-			log.Printf("Reading from reader: %s", err)
-			continue
+			record = *r
 		}
 
 		// Read eBPF binary data into go native structure, the ABI compatibility is ensured by cilium/ebpf
@@ -108,13 +141,21 @@ func main() {
 
 		// Transform the stack trace from eBPF with raw addresses to something more readable
 		ustack := elf.humanReadableStack(event.UserStack)
-		// Print each event
-		fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), pid)
-		fmt.Println("  ADDRESS    PC         SYMBOL                             FILE:LINE")
-		fmt.Println("  ---------  ---------  ---------------------------------  ------------------------------------")
+
+		// Aggregate stack trace statistics
 		for _, l := range ustack {
-			fmt.Println(" ", l)
+			stats.add(l)
 		}
-		fmt.Println()
+
+		if verbose >= 1 {
+			// Print each event
+			fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), pid)
+			fmt.Println("  ADDRESS    PC         SYMBOL                             FILE:LINE")
+			fmt.Println("  ---------  ---------  ---------------------------------  ------------------------------------")
+			for _, l := range ustack {
+				fmt.Println(" ", l)
+			}
+			fmt.Println()
+		}
 	}
 }

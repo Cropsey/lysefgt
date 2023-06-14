@@ -31,6 +31,51 @@ type elfHelper struct {
 	elfFile *elf.File
 }
 
+// Statistics for stack trace symbol counts
+type stats struct {
+	count map[string]int
+	meta  map[string]stackPos
+}
+
+// Helper for sorting symbols from stack trace stats by most frequently occurring
+type sortSymbolCount struct {
+	symbol string
+	count  int
+}
+
+// Initialize stats counters for stack trace symbol counts
+func newStats() *stats {
+	return &stats{
+		count: make(map[string]int),
+		meta:  make(map[string]stackPos),
+	}
+}
+
+// Process stack position by stats counter
+func (a *stats) add(sp stackPos) {
+	a.count[sp.symbol] += 1
+	if _, exists := a.meta[sp.symbol]; !exists {
+		a.meta[sp.symbol] = sp
+	}
+}
+
+// Print stack trace stats summary
+func (a *stats) summary() {
+	var s []sortSymbolCount
+	for symbol, count := range a.count {
+		s = append(s, sortSymbolCount{symbol: symbol, count: count})
+	}
+	sort.Slice(s, func(i, j int) bool { return s[i].count > s[j].count })
+	fmt.Println()
+	fmt.Println("AGGREGATED PERF EVENT SAMPLES:")
+	fmt.Println("  COUNT  SYMBOL                                 FILE:LINE")
+	fmt.Println("  -----  -------------------------------------  ------------------------------------")
+	for _, sorted := range s {
+		sp := a.meta[sorted.symbol]
+		fmt.Printf("%7d  %-37v  %v:%v\n", sorted.count, sp.symbol+"()", sp.file, sp.line)
+	}
+}
+
 // Initialize ELF helper
 func newElf(pid int) elfHelper {
 	// Figure out the binary path for the process with PID
