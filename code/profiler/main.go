@@ -110,8 +110,8 @@ func main() {
 		ustack := elf.humanReadableStack(event.UserStack)
 		// Print each event
 		fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), pid)
-		fmt.Println("  ADDRESS    PC         SYMBOL                            ")
-		fmt.Println("  ---------  ---------  --------------------------------- ")
+		fmt.Println("  ADDRESS    PC         SYMBOL                             FILE:LINE")
+		fmt.Println("  ---------  ---------  ---------------------------------  ------------------------------------")
 		for _, l := range ustack {
 			fmt.Println(" ", l)
 		}
