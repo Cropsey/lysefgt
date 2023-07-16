@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: profiler
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "2112"
     spec:
       hostPID: true
       containers:
