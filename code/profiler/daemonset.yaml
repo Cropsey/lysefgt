@@ -13,6 +13,7 @@ spec:
       labels:
         app: profiler
     spec:
+      hostPID: true
       containers:
       - image: registry.kube-system.svc:5000/profiler
         imagePullPolicy: Always
