@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: profiler
+  name: profiler
+spec:
+  selector:
+    matchLabels:
+      app: profiler
+  template:
+    metadata:
+      labels:
+        app: profiler
+    spec:
+      containers:
+      - image: registry.kube-system.svc:5000/profiler
+        imagePullPolicy: Always
+        name: profiler
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /sys/fs/bpf
+          name: bpffs
+      volumes:
+      - hostPath:
+          path: /sys/fs/bpf
+        name: bpffs

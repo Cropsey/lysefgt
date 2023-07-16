@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"time"
 
 	"github.com/cilium/ebpf/perf"
@@ -37,7 +38,7 @@ func main() {
 	// Command line flag parsing
 	var pid int
 	var verbose int
-	flag.IntVar(&pid, "pid", 0, "PID of the profiled process")
+	flag.IntVar(&pid, "pid", 0, "PID of the profiled process, when 0 it will try to profile all processes it has ability to do so")
 	flag.IntVar(&verbose, "v", 0, "Verbosity of perf event logs, 0 prints only aggregate, 1 prints each perf event record")
 	flag.Parse()
 
@@ -64,46 +65,77 @@ func main() {
 
 	log.Println("Waiting for events..")
 
-	anyCPU := -1      // Sample application on any CPU
-	groupLeader := -1 // Disable event grouping
-	// Go wrapper for perf_event_open syscall
-	perfEventFD, err := unix.PerfEventOpen(
-		&unix.PerfEventAttr{
-			Type:        unix.PERF_TYPE_SOFTWARE,        // Indicates software-defined event, defines available values for `Config`
-			Config:      unix.PERF_COUNT_SW_CPU_CLOCK,   // Reports the CPU clock, high-resolution per-CPU timer, connected to `Type` defined above
-			Sample_type: unix.PERF_SAMPLE_RAW,           // Allowing eBPF to record additional data
-			Sample:      uint64(time.Millisecond * 100), // Create perf event sample every 100ms
-			Wakeup:      1,                              // Don't skip any samples
-		},
-		pid,                       // Profiled application PID, must be present given anyCPU argument value -1
-		anyCPU,                    // The CPU ID, -1 means all CPUs
-		groupLeader,               // Configure event grouping, -1 means disabled
-		unix.PERF_FLAG_FD_CLOEXEC, // Close the event fd on execve, avoiding possible race conditions
-	)
-	if err != nil {
-		log.Fatalf("Failed to create the perf event: %v", err)
-	}
-	defer func() {
-		if err := unix.Close(perfEventFD); err != nil {
-			log.Fatalf("Failed to close perf event: %v", err)
+	var perfEventFDs []int
+	if pid == 0 { // Profile all processes on all CPUs
+		for cpu := 0; cpu < runtime.NumCPU(); cpu++ {
+			log.Printf("Setting all process profiler on CPU %v", cpu)
+			// This requires CAP_PERFMON or CAP_SYS_ADMIN or /proc/sys/kernel/perf_event_paranoid
+			anyPid := -1      // Profile all processes and threads on the specified CPU
+			groupLeader := -1 // Disable event grouping
+			// Go wrapper for perf_event_open syscall
+			perfEventFD, err := unix.PerfEventOpen(
+				&unix.PerfEventAttr{
+					Type:        unix.PERF_TYPE_SOFTWARE,        // Indicates software-defined event, defines available values for `Config`
+					Config:      unix.PERF_COUNT_SW_CPU_CLOCK,   // Reports the CPU clock, high-resolution per-CPU timer, connected to `Type` defined above
+					Sample_type: unix.PERF_SAMPLE_RAW,           // Allowing eBPF to record additional data
+					Sample:      uint64(time.Millisecond * 100), // Create perf event sample every 100ms
+					Wakeup:      1,                              // Don't skip any samples
+				},
+				anyPid,                    // Profile all processes
+				cpu,                       // The CPU to profile all processes
+				groupLeader,               // Configure event grouping, -1 means disabled
+				unix.PERF_FLAG_FD_CLOEXEC, // Close the event fd on execve, avoiding possible race conditions
+			)
+			if err != nil {
+				log.Fatalf("Failed to create the perf event: %v", err)
+			}
+			perfEventFDs = append(perfEventFDs, perfEventFD)
 		}
-	}()
-
-	// Tell kernel to attach eBPF program to the perf event fd
-	if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_SET_BPF, objs.bpfPrograms.PerfEventStacktrace.FD()); err != nil {
-		log.Fatalf("Failed to attach eBPF program to perf event: %v", err)
-	}
-
-	// Tell kernel to enable the perf event
-	if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
-		log.Fatalf("Failed to enable perf event: %v", err)
-	}
-
-	defer func() {
-		if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_DISABLE, 0); err != nil {
-			log.Fatalf("Failed to disable perf event: %v", err)
+	} else { // Running with specific PID to profile
+		anyCPU := -1      // Sample application on any CPU
+		groupLeader := -1 // Disable event grouping
+		// Go wrapper for perf_event_open syscall
+		perfEventFD, err := unix.PerfEventOpen(
+			&unix.PerfEventAttr{
+				Type:        unix.PERF_TYPE_SOFTWARE,        // Indicates software-defined event, defines available values for `Config`
+				Config:      unix.PERF_COUNT_SW_CPU_CLOCK,   // Reports the CPU clock, high-resolution per-CPU timer, connected to `Type` defined above
+				Sample_type: unix.PERF_SAMPLE_RAW,           // Allowing eBPF to record additional data
+				Sample:      uint64(time.Millisecond * 100), // Create perf event sample every 100ms
+				Wakeup:      1,                              // Don't skip any samples
+			},
+			pid,                       // Profiled application PID, must be present given anyCPU argument value -1
+			anyCPU,                    // The CPU ID, -1 means all CPUs
+			groupLeader,               // Configure event grouping, -1 means disabled
+			unix.PERF_FLAG_FD_CLOEXEC, // Close the event fd on execve, avoiding possible race conditions
+		)
+		if err != nil {
+			log.Fatalf("Failed to create the perf event: %v", err)
 		}
-	}()
+		perfEventFDs = append(perfEventFDs, perfEventFD)
+	}
+
+	for _, perfEventFD := range perfEventFDs {
+		defer func() {
+			if err := unix.Close(perfEventFD); err != nil {
+				log.Fatalf("Failed to close perf event: %v", err)
+			}
+		}()
+		// Tell kernel to attach eBPF program to the perf event fd
+		if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_SET_BPF, objs.bpfPrograms.PerfEventStacktrace.FD()); err != nil {
+			log.Fatalf("Failed to attach eBPF program to perf event: %v", err)
+		}
+
+		// Tell kernel to enable the perf event
+		if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
+			log.Fatalf("Failed to enable perf event: %v", err)
+		}
+
+		defer func() {
+			if err := unix.IoctlSetInt(perfEventFD, unix.PERF_EVENT_IOC_DISABLE, 0); err != nil {
+				log.Fatalf("Failed to disable perf event: %v", err)
+			}
+		}()
+	}
 
 	// Create ELF parser for the binary running as process with PID
 	elf := newElf(pid)
@@ -140,16 +172,19 @@ func main() {
 		}
 
 		// Transform the stack trace from eBPF with raw addresses to something more readable
-		ustack := elf.humanReadableStack(event.UserStack)
+		ustack := elf.humanReadableStack(int(event.Pid), event.UserStack)
+		if ustack == nil {
+			continue
+		}
 
 		// Aggregate stack trace statistics
 		for _, l := range ustack {
-			stats.add(l)
+			stats.add(int(event.Pid), l)
 		}
 
 		if verbose >= 1 {
 			// Print each event
-			fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), pid)
+			fmt.Printf("bin[%v] pid[%v]\n", event.taskComm(), event.Pid)
 			fmt.Println("  ADDRESS    PC         SYMBOL                             FILE:LINE")
 			fmt.Println("  ---------  ---------  ---------------------------------  ------------------------------------")
 			for _, l := range ustack {
