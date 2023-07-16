@@ -24,7 +24,12 @@ spec:
         volumeMounts:
         - mountPath: /sys/fs/bpf
           name: bpffs
+        - mountPath: /run
+          name: run
       volumes:
       - hostPath:
           path: /sys/fs/bpf
         name: bpffs
+      - hostPath:
+          path: /run
+        name: run

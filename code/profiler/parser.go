@@ -4,12 +4,17 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/go-delve/delve/pkg/dwarf/reader"
 )
+
+var withContainerd bool
 
 // To keep track of particular stack trace position enhanced with human readable metadata
 type stackPos struct {
@@ -136,6 +141,21 @@ func newElfHelperForPid(pid int) (elfHelper, error) {
 	binPath, err := os.Readlink(fmt.Sprintf("/proc/%v/exe", pid))
 	if err != nil {
 		return elfHelper{}, fmt.Errorf("Failed to read binpath from pid %v: %v", pid, err)
+	}
+	if withContainerd {
+		// When running the profiler in kubernetes, executing containers have their binaries on the container FS
+		// it's possible to determine where exactly by looking at cgroup for the PID containing container ID
+		cgroup, err := ioutil.ReadFile(fmt.Sprintf("/proc/%v/cgroup", pid))
+		if err != nil {
+			return elfHelper{}, fmt.Errorf("Failed to read cgroup from pid %v: %v", pid, err)
+		}
+		containerID := string(regexp.MustCompile(`cri-containerd-.*\.scope`).Find(cgroup))
+		if containerID == "" {
+			return elfHelper{}, fmt.Errorf("Failed to determine containerID from cgroup for pid %v", pid)
+		}
+		containerID = strings.TrimPrefix(containerID, `cri-containerd-`)
+		containerID = strings.TrimSuffix(containerID, `.scope`)
+		binPath = fmt.Sprintf("/run/containerd/io.containerd.runtime.v2.task/k8s.io/%v/rootfs/%v", containerID, binPath)
 	}
 	f, err := os.Open(binPath)
 	if err != nil {

@@ -41,6 +41,7 @@ func main() {
 	var verbose int
 	flag.IntVar(&pid, "pid", 0, "PID of the profiled process, when 0 it will try to profile all processes it has ability to do so")
 	flag.IntVar(&verbose, "v", 0, "Verbosity of perf event logs, 0 prints only aggregate, 1 prints each perf event record")
+	flag.BoolVar(&withContainerd, "with-containerd", false, "Flag controlling how to determine the binary a profiled process is executing. When set to 'true' it will figure out from cgroup where the binary is stored in the container fs instead of using just /proc/{pid}/exe")
 	flag.Parse()
 
 	// Print errors where they belong
