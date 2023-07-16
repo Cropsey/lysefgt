@@ -47,6 +47,9 @@ func main() {
 	// Print errors where they belong
 	log.SetOutput(os.Stderr)
 
+	// Expose stack trace statistics as prometheus metrics
+	go runPrometheus()
+
 	// Allow the current process to lock memory for eBPF resources
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("Failed to update rlimit: %v", err)
@@ -185,8 +188,9 @@ func main() {
 		}
 
 		// Aggregate stack trace statistics
-		for _, l := range ustack {
+		for i, l := range ustack {
 			stats.add(int(event.Pid), l)
+			addPrometheus(event, len(ustack)-i-1, ustack)
 		}
 
 		if verbose >= 1 {
