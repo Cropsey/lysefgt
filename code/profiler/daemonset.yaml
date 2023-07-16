@@ -26,6 +26,8 @@ spec:
           name: bpffs
         - mountPath: /run
           name: run
+        - mountPath: /sys/fs/bpf
+          name: bpffs
       volumes:
       - hostPath:
           path: /sys/fs/bpf
@@ -33,3 +35,6 @@ spec:
       - hostPath:
           path: /run
         name: run
+      - hostPath:
+          path: /sys/fs/bpf
+        name: bpffs
