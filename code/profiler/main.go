@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 )
 
@@ -44,6 +45,11 @@ func main() {
 
 	// Print errors where they belong
 	log.SetOutput(os.Stderr)
+
+	// Allow the current process to lock memory for eBPF resources
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("Failed to update rlimit: %v", err)
+	}
 
 	// Leverage cilium/ebpf generated scaffold
 	objs := bpfObjects{}
