@@ -17,6 +17,14 @@ cat << EOF >> /etc/containerd/config.toml
 EOF
 systemctl restart docker.service containerd.service
 
+echo "install bpftool"
+
+wget https://github.com/libbpf/bpftool/releases/download/v7.2.0/bpftool-v7.2.0-amd64.tar.gz
+tar -xzvf bpftool-v7.2.0-amd64.tar.gz
+chmod +x bpftool
+mv bpftool /usr/sbin/bpftool
+rm -rf bpftool-v7.2.0-amd64.tar.gz
+
 echo "install llvm and clang packages"
 apt-get install -y llvm clang
 

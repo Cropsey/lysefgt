@@ -5,7 +5,7 @@ Let's take a look at first set of improvements in [PR#14](https://github.com/Cro
 cd /root/lysefgt/code/profiler
 git fetch origin profiler_2:profiler_2
 git merge profiler_2
-pid=$(ps aux | awk '/sample_app/{print($2)}')
+pid=$(pgrep sample_app)
 make clean
 make profiler
 ./profiler -pid $pid

@@ -6,7 +6,7 @@ By the end of this step, your stack traces will contain sufficient amount of inf
 cd /root/lysefgt/code/profiler
 git fetch origin profiler_4:profiler_4
 git merge profiler_4
-pid=$(ps aux | awk '/sample_app/{print($2)}')
+pid=$(pgrep sample_app)
 make clean
 make profiler
 ./profiler -pid $pid

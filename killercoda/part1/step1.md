@@ -30,7 +30,7 @@ make
 ```{{exec}}
 We need to get the PID of the `sample_app`{{}} and pass it to the `profiler`{{}} so it knows which process to profile.
 ```
-pid=$(ps aux | awk '/sample_app/{print($2)}')
+pid=$(pgrep sample_app)
 ./profiler -v 2 -pid $pid
 ```{{exec}}
 

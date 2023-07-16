@@ -17,7 +17,7 @@ able to gradually build up.
 git fetch origin profiler_1:profiler_1
 git merge profiler_1
 cd /root/lysefgt/code/profiler
-pid=$(ps aux | awk '/sample_app/{print($2)}')
+pid=$(pgrep sample_app)
 make clean
 make profiler
 ./profiler -pid $pid

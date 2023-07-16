@@ -10,7 +10,7 @@ observe independent stack traces as they arrive.
 cd /root/lysefgt/code/profiler
 git fetch origin profiler_5:profiler_5
 git merge profiler_5
-pid=$(ps aux | awk '/sample_app/{print($2)}')
+pid=$(pgrep sample_app)
 make clean
 make profiler
 ./profiler -v 2 -pid $pid
